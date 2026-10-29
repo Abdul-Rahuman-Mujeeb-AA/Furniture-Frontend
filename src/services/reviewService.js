@@ -16,6 +16,7 @@ reviewApi.interceptors.request.use(
       localStorage.getItem("token") || localStorage.getItem("accessToken");
 
     if (token) {
+      config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;
     }
 
@@ -37,29 +38,44 @@ const reviewService = {
 
     const data = response.data;
 
-    if (Array.isArray(data)) return data;
+    // Your backend returns { totalReviews, averageRating, reviews }.
     if (Array.isArray(data?.reviews)) return data.reviews;
+    if (Array.isArray(data?.data?.reviews)) return data.data.reviews;
+    if (Array.isArray(data)) return data;
     if (Array.isArray(data?.data)) return data.data;
 
     return [];
   },
 
   // POST /api/reviews
-  async createReview(reviewData) {
-    if (!reviewData?.productId) {
+  // Backend expects { productId, rating, comment }.
+  async createReview(productId, reviewData = {}) {
+    if (!productId) {
       throw new Error("Product ID is required to submit a review.");
     }
 
-    if (!reviewData?.rating) {
-      throw new Error("Please provide a rating.");
+    const rating = Number(reviewData.rating);
+    const comment = String(reviewData.comment || "").trim();
+
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      throw new Error("Please select a rating from 1 to 5 stars.");
     }
 
-    const response = await reviewApi.post("/", reviewData);
+    if (!comment) {
+      throw new Error("Please write your review.");
+    }
+
+    const response = await reviewApi.post("/", {
+      productId,
+      rating,
+      comment,
+    });
+
     return response.data;
   },
 
   // PUT /api/reviews/:id
-  async updateReview(reviewId, reviewData) {
+  async updateReview(reviewId, reviewData = {}) {
     if (!reviewId) {
       throw new Error("Review ID is required.");
     }
@@ -83,9 +99,9 @@ const reviewService = {
     return response.data;
   },
 
-  // Alias for components using submitReview().
-  async submitReview(reviewData) {
-    return this.createReview(reviewData);
+  // Compatibility alias for other components.
+  async submitReview(productId, reviewData = {}) {
+    return reviewService.createReview(productId, reviewData);
   },
 };
 
