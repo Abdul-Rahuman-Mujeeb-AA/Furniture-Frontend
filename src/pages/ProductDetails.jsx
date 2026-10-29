@@ -7,13 +7,13 @@ import {
   ChevronRight,
   Heart,
   Minus,
+  Package,
   Plus,
   RefreshCw,
+  ShieldCheck,
   ShoppingCart,
   Star,
   Truck,
-  ShieldCheck,
-  Package,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -22,30 +22,27 @@ import cartService from "../services/cartService";
 import reviewService from "../services/reviewService";
 import ReviewForm from "../components/ReviewForm";
 
-/* -------------------------------------------------------
+/* =====================================================
    Helpers
-------------------------------------------------------- */
+===================================================== */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL.replace(/\/+$/, "");
+const API_BASE_URL = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
 
 const getToken = () =>
   localStorage.getItem("token") || localStorage.getItem("accessToken") || "";
 
+const getId = (item) => String(item?._id ?? item?.id ?? "");
+
 const getStoredWishlist = () => {
   try {
-    const stored = JSON.parse(localStorage.getItem("wishlist") || "[]");
-
-    return Array.isArray(stored) ? stored : [];
+    const value = JSON.parse(localStorage.getItem("wishlist") || "[]");
+    return Array.isArray(value) ? value : [];
   } catch {
     return [];
   }
 };
 
-const getId = (item) => String(item?._id ?? item?.id ?? "");
-
 const getArray = (response) => {
-  if (Array.isArray(response)) return response;
-
   const data = response?.data ?? response;
 
   if (Array.isArray(data)) return data;
@@ -62,9 +59,7 @@ const getObject = (response) => {
   if (data?.product) return data.product;
   if (data?.data?.product) return data.data.product;
 
-  if (data?.data && !Array.isArray(data.data)) {
-    return data.data;
-  }
+  if (data?.data && !Array.isArray(data.data)) return data.data;
 
   return data;
 };
@@ -92,17 +87,17 @@ const formatPrice = (price) =>
 const getImageUrl = (image) => {
   if (!image) return "";
 
-  if (typeof image === "string") {
-    if (/^(https?:\/\/|data:|blob:)/i.test(image)) {
-      return image;
-    }
-
-    const baseUrl = API_BASE_URL.replace(/\/api$/, "");
-
-    return image.startsWith("/") ? `${baseUrl}${image}` : `${baseUrl}/${image}`;
+  if (typeof image !== "string") {
+    return image.url || image.secure_url || image.imageUrl || image.src || "";
   }
 
-  return image.url || image.secure_url || image.imageUrl || image.src || "";
+  if (/^(https?:\/\/|data:|blob:)/i.test(image)) {
+    return image;
+  }
+
+  const baseUrl = API_BASE_URL.replace(/\/api\/?$/i, "");
+
+  return image.startsWith("/") ? `${baseUrl}${image}` : `${baseUrl}/${image}`;
 };
 
 const getProductImages = (product) => {
@@ -123,12 +118,12 @@ const isAbortError = (error) =>
   error?.name === "CanceledError" ||
   error?.code === "ERR_CANCELED";
 
-/* -------------------------------------------------------
+/* =====================================================
    Rating Stars
-------------------------------------------------------- */
+===================================================== */
 
 function RatingStars({ rating = 0, count, size = 16 }) {
-  const numericRating = Math.max(0, Math.min(5, Number(rating) || 0));
+  const value = Math.max(0, Math.min(5, Number(rating) || 0));
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
@@ -138,7 +133,7 @@ function RatingStars({ rating = 0, count, size = 16 }) {
             key={star}
             size={size}
             className={
-              star <= Math.round(numericRating)
+              star <= Math.round(value)
                 ? "fill-amber-400 text-amber-400"
                 : "text-gray-300"
             }
@@ -146,7 +141,7 @@ function RatingStars({ rating = 0, count, size = 16 }) {
         ))}
       </div>
 
-      <span className="text-sm text-gray-600">{numericRating.toFixed(1)}</span>
+      <span className="text-sm text-gray-600">{value.toFixed(1)}</span>
 
       {count !== undefined && (
         <span className="text-sm text-gray-500">({count})</span>
@@ -155,12 +150,15 @@ function RatingStars({ rating = 0, count, size = 16 }) {
   );
 }
 
-/* -------------------------------------------------------
+/* =====================================================
    Product Image
-------------------------------------------------------- */
+   No state-resetting useEffect
+===================================================== */
 
 function ProductImage({ src, alt, className = "" }) {
-  const [failed, setFailed] = useState(false);
+  const [failedSrc, setFailedSrc] = useState("");
+
+  const failed = Boolean(src) && failedSrc === src;
 
   return (
     <div
@@ -168,11 +166,10 @@ function ProductImage({ src, alt, className = "" }) {
     >
       {src && !failed ? (
         <img
-          key={src}
           src={src}
-          alt={alt}
+          alt={alt || "Furniture product"}
           className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
-          onError={() => setFailed(true)}
+          onError={() => setFailedSrc(src)}
         />
       ) : (
         <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-gray-400">
@@ -184,15 +181,13 @@ function ProductImage({ src, alt, className = "" }) {
   );
 }
 
-/* -------------------------------------------------------
+/* =====================================================
    Review Card
-------------------------------------------------------- */
+===================================================== */
 
 function ReviewCard({ review }) {
   const reviewer =
     review?.user?.name || review?.userName || review?.name || "Customer";
-
-  const rating = Number(review?.rating) || 0;
 
   const date = review?.createdAt
     ? new Date(review.createdAt).toLocaleDateString("en-IN", {
@@ -207,11 +202,10 @@ function ReviewCard({ review }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="font-medium text-gray-900">{reviewer}</h3>
-
           {date && <p className="mt-1 text-xs text-gray-500">{date}</p>}
         </div>
 
-        <RatingStars rating={rating} size={14} />
+        <RatingStars rating={review?.rating} size={14} />
       </div>
 
       {review?.title && (
@@ -225,9 +219,9 @@ function ReviewCard({ review }) {
   );
 }
 
-/* -------------------------------------------------------
+/* =====================================================
    Specifications
-------------------------------------------------------- */
+===================================================== */
 
 function Specifications({ product }) {
   const specifications = [
@@ -246,7 +240,7 @@ function Specifications({ product }) {
   if (!specifications.length) return null;
 
   return (
-    <div className="mt-8">
+    <section className="mt-8">
       <h2 className="mb-4 text-xl font-semibold text-gray-900">
         Specifications
       </h2>
@@ -255,20 +249,19 @@ function Specifications({ product }) {
         {specifications.map(([label, value]) => (
           <div key={label} className="grid grid-cols-2 gap-4 px-4 py-3">
             <dt className="text-sm text-gray-500">{label}</dt>
-
             <dd className="wrap-break-word text-sm font-medium text-gray-800">
               {typeof value === "object" ? JSON.stringify(value) : value}
             </dd>
           </div>
         ))}
       </dl>
-    </div>
+    </section>
   );
 }
 
-/* -------------------------------------------------------
+/* =====================================================
    Related Product Card
-------------------------------------------------------- */
+===================================================== */
 
 function RelatedProductCard({ product }) {
   const images = getProductImages(product);
@@ -307,15 +300,15 @@ function RelatedProductCard({ product }) {
   );
 }
 
-/* -------------------------------------------------------
-   Main Product Details
-------------------------------------------------------- */
+/* =====================================================
+   Product Details Page
+===================================================== */
 
 export default function ProductDetails() {
   const { id } = useParams();
 
-  const requestControllerRef = useRef(null);
   const requestIdRef = useRef(0);
+  const requestControllerRef = useRef(null);
 
   const [product, setProduct] = useState(null);
   const [reviews, setReviews] = useState([]);
@@ -328,7 +321,7 @@ export default function ProductDetails() {
   const [addingToCart, setAddingToCart] = useState(false);
   const [wishlist, setWishlist] = useState(getStoredWishlist);
 
-  /* Load product, reviews and related products */
+  /* Fetch product information */
 
   const loadProduct = useCallback(
     async (signal) => {
@@ -337,15 +330,12 @@ export default function ProductDetails() {
       const isCurrentRequest = () =>
         !signal?.aborted && requestId === requestIdRef.current;
 
-      setLoading(true);
-      setPageError("");
-
       try {
-        const productResponse = await productService.getProductById(id);
+        const response = await productService.getProductById(id);
 
         if (!isCurrentRequest()) return;
 
-        const fetchedProduct = getObject(productResponse);
+        const fetchedProduct = getObject(response);
 
         if (
           !fetchedProduct ||
@@ -364,46 +354,36 @@ export default function ProductDetails() {
             ? getId(fetchedProduct.category)
             : fetchedProduct.category;
 
-        const relatedRequest = categoryId
-          ? productService.getProducts({
-              category: categoryId,
-              limit: 5,
-            })
-          : Promise.resolve([]);
-
-        const reviewsRequest = reviewService
-          .getProductReviews(id)
-          .catch((error) => {
-            if (isAbortError(error)) throw error;
-            return [];
-          });
-
         const [relatedResult, reviewsResult] = await Promise.allSettled([
-          relatedRequest,
-          reviewsRequest,
+          categoryId
+            ? productService.getProducts({
+                category: categoryId,
+                limit: 5,
+              })
+            : Promise.resolve([]),
+
+          reviewService.getProductReviews(id),
         ]);
 
         if (!isCurrentRequest()) return;
 
-        if (relatedResult.status === "fulfilled") {
-          setRelatedProducts(
-            getArray(relatedResult.value)
-              .filter((item) => getId(item) !== getId(fetchedProduct))
-              .slice(0, 4),
-          );
-        } else {
-          setRelatedProducts([]);
-        }
+        setRelatedProducts(
+          relatedResult.status === "fulfilled"
+            ? getArray(relatedResult.value)
+                .filter((item) => getId(item) !== getId(fetchedProduct))
+                .slice(0, 4)
+            : [],
+        );
 
-        if (reviewsResult.status === "fulfilled") {
-          setReviews(getArray(reviewsResult.value));
-        } else {
-          setReviews([]);
-        }
+        setReviews(
+          reviewsResult.status === "fulfilled"
+            ? getArray(reviewsResult.value)
+            : [],
+        );
+
+        setPageError("");
       } catch (error) {
-        if (!isCurrentRequest() || isAbortError(error)) {
-          return;
-        }
+        if (!isCurrentRequest() || isAbortError(error)) return;
 
         setPageError(getErrorMessage(error));
         setProduct(null);
@@ -418,22 +398,22 @@ export default function ProductDetails() {
     [id],
   );
 
-  /* Defer initial loading to avoid synchronous effect updates */
+  /*
+   * Important:
+   * Defer the request so the effect itself does not synchronously
+   * invoke a function that updates React state.
+   */
 
   useEffect(() => {
     const controller = new AbortController();
 
     requestControllerRef.current = controller;
 
-    const startLoading = Promise.resolve().then(() => {
+    Promise.resolve().then(() => {
       if (!controller.signal.aborted) {
-        return loadProduct(controller.signal);
+        void loadProduct(controller.signal);
       }
-
-      return undefined;
     });
-
-    void startLoading;
 
     return () => {
       controller.abort();
@@ -444,7 +424,7 @@ export default function ProductDetails() {
     };
   }, [loadProduct]);
 
-  /* Retry or refresh product data */
+  /* Retry loading */
 
   const handleRetry = useCallback(() => {
     requestControllerRef.current?.abort();
@@ -452,15 +432,14 @@ export default function ProductDetails() {
     const controller = new AbortController();
     requestControllerRef.current = controller;
 
-    const startLoading = Promise.resolve().then(() => {
+    setLoading(true);
+    setPageError("");
+
+    Promise.resolve().then(() => {
       if (!controller.signal.aborted) {
-        return loadProduct(controller.signal);
+        void loadProduct(controller.signal);
       }
-
-      return undefined;
     });
-
-    void startLoading;
   }, [loadProduct]);
 
   /* Derived values */
@@ -491,9 +470,7 @@ export default function ProductDetails() {
   }, [product, reviews]);
 
   const discountPercentage = useMemo(() => {
-    if (originalPrice <= price || originalPrice <= 0) {
-      return 0;
-    }
+    if (originalPrice <= price || originalPrice <= 0) return 0;
 
     return Math.round(((originalPrice - price) / originalPrice) * 100);
   }, [originalPrice, price]);
@@ -510,27 +487,23 @@ export default function ProductDetails() {
   const handleWishlist = useCallback(() => {
     if (!productId) return;
 
-    setWishlist((previous) => {
-      const exists = previous.some(
-        (item) =>
-          String(typeof item === "object" ? getId(item) : item) === productId,
-      );
+    const exists = wishlist.some(
+      (item) =>
+        String(typeof item === "object" ? getId(item) : item) === productId,
+    );
 
-      const updated = exists
-        ? previous.filter(
-            (item) =>
-              String(typeof item === "object" ? getId(item) : item) !==
-              productId,
-          )
-        : [...previous, productId];
+    const updated = exists
+      ? wishlist.filter(
+          (item) =>
+            String(typeof item === "object" ? getId(item) : item) !== productId,
+        )
+      : [...wishlist, productId];
 
-      localStorage.setItem("wishlist", JSON.stringify(updated));
+    localStorage.setItem("wishlist", JSON.stringify(updated));
+    setWishlist(updated);
 
-      return updated;
-    });
-
-    toast.success(isWishlisted ? "Removed from wishlist" : "Added to wishlist");
-  }, [productId, isWishlisted]);
+    toast.success(exists ? "Removed from wishlist" : "Added to wishlist");
+  }, [productId, wishlist]);
 
   /* Add to cart */
 
@@ -558,10 +531,8 @@ export default function ProductDetails() {
     try {
       setAddingToCart(true);
 
-      await cartService.addToCart({
-        productId,
-        quantity,
-      });
+      // Pass the product ID and quantity as separate arguments.
+      await cartService.addToCart(productId, quantity);
 
       toast.success("Product added to cart");
     } catch (error) {
@@ -571,15 +542,17 @@ export default function ProductDetails() {
     }
   }, [productId, quantity, stock]);
 
+  /* Quantity controls */
+
   const decreaseQuantity = () => {
     setQuantity((current) => Math.max(1, current - 1));
   };
 
   const increaseQuantity = () => {
-    setQuantity((current) => Math.min(Math.max(stock, 1), current + 1));
+    setQuantity((current) => Math.min(stock, current + 1));
   };
 
-  /* Loading state */
+  /* Loading screen */
 
   if (loading) {
     return (
@@ -596,7 +569,6 @@ export default function ProductDetails() {
               <div className="h-10 w-1/2 rounded bg-gray-200" />
               <div className="h-24 rounded bg-gray-200" />
               <div className="h-12 rounded bg-gray-200" />
-              <div className="h-12 rounded bg-gray-200" />
             </div>
           </div>
         </div>
@@ -604,7 +576,7 @@ export default function ProductDetails() {
     );
   }
 
-  /* Error state */
+  /* Error screen */
 
   if (pageError || !product) {
     return (
@@ -641,24 +613,25 @@ export default function ProductDetails() {
     );
   }
 
-  /* Main product page */
+  /* Main page */
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       <Link
         to="/products"
-        className="mb-8 inline-flex items-center gap-2 text-sm text-gray-600 transition hover:text-gray-900"
+        className="mb-8 inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
       >
         <ArrowLeft size={17} />
         Back to products
       </Link>
 
       <section className="grid items-start gap-8 lg:grid-cols-2 lg:gap-12">
-        {/* Product images */}
+        {/* Images */}
 
         <div>
           <div className="relative overflow-hidden rounded-2xl">
             <ProductImage
+              key={images[selectedImage] || "no-image"}
               src={images[selectedImage]}
               alt={product.name || "Furniture product"}
               className="aspect-square w-full"
@@ -676,7 +649,7 @@ export default function ProductDetails() {
               aria-label={
                 isWishlisted ? "Remove from wishlist" : "Add to wishlist"
               }
-              className="absolute right-4 top-4 flex h-11 w-11 items-center justify-center rounded-full bg-white shadow transition hover:scale-105"
+              className="absolute right-4 top-4 flex h-11 w-11 items-center justify-center rounded-full bg-white shadow"
             >
               <Heart
                 size={21}
@@ -696,7 +669,7 @@ export default function ProductDetails() {
                       current === 0 ? images.length - 1 : current - 1,
                     )
                   }
-                  className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow hover:bg-white"
+                  className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow"
                 >
                   <ChevronLeft size={22} />
                 </button>
@@ -707,7 +680,7 @@ export default function ProductDetails() {
                   onClick={() =>
                     setSelectedImage((current) => (current + 1) % images.length)
                   }
-                  className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow hover:bg-white"
+                  className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow"
                 >
                   <ChevronRight size={22} />
                 </button>
@@ -740,7 +713,7 @@ export default function ProductDetails() {
           )}
         </div>
 
-        {/* Product information */}
+        {/* Product details */}
 
         <div>
           {product.category && (
@@ -782,7 +755,6 @@ export default function ProductDetails() {
               {stock > 0 ? (
                 <>
                   <Check size={18} className="text-green-600" />
-
                   <span className="font-medium text-green-700">In stock</span>
 
                   {stock <= 5 && (
@@ -816,7 +788,7 @@ export default function ProductDetails() {
                 onClick={decreaseQuantity}
                 disabled={quantity <= 1}
                 aria-label="Decrease quantity"
-                className="flex h-11 w-11 items-center justify-center hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex h-11 w-11 items-center justify-center hover:bg-gray-100 disabled:opacity-40"
               >
                 <Minus size={16} />
               </button>
@@ -830,24 +802,23 @@ export default function ProductDetails() {
                 onClick={increaseQuantity}
                 disabled={stock <= 0 || quantity >= stock}
                 aria-label="Increase quantity"
-                className="flex h-11 w-11 items-center justify-center hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex h-11 w-11 items-center justify-center hover:bg-gray-100 disabled:opacity-40"
               >
                 <Plus size={16} />
               </button>
             </div>
           </div>
 
-          {/* Cart and wishlist buttons */}
+          {/* Cart buttons */}
 
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">
             <button
               type="button"
               onClick={handleAddToCart}
               disabled={stock <= 0 || addingToCart}
-              className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-lg bg-gray-900 px-6 py-3 font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-400"
+              className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-lg bg-gray-900 px-6 py-3 font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-400"
             >
               <ShoppingCart size={19} />
-
               {addingToCart
                 ? "Adding to cart..."
                 : stock <= 0
@@ -858,7 +829,7 @@ export default function ProductDetails() {
             <button
               type="button"
               onClick={handleWishlist}
-              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-gray-300 px-6 py-3 font-semibold text-gray-800 transition hover:bg-gray-50"
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-gray-300 px-6 py-3 font-semibold text-gray-800 hover:bg-gray-50"
             >
               <Heart
                 size={19}
@@ -868,12 +839,11 @@ export default function ProductDetails() {
             </button>
           </div>
 
-          {/* Service information */}
+          {/* Delivery information */}
 
           <div className="mt-8 grid gap-4 rounded-xl bg-gray-50 p-5 sm:grid-cols-2">
             <div className="flex items-start gap-3">
               <Truck size={22} className="mt-0.5 shrink-0 text-gray-700" />
-
               <div>
                 <h3 className="font-medium text-gray-900">Delivery</h3>
                 <p className="mt-1 text-sm text-gray-500">
@@ -887,7 +857,6 @@ export default function ProductDetails() {
                 size={22}
                 className="mt-0.5 shrink-0 text-gray-700"
               />
-
               <div>
                 <h3 className="font-medium text-gray-900">Secure shopping</h3>
                 <p className="mt-1 text-sm text-gray-500">
@@ -901,7 +870,7 @@ export default function ProductDetails() {
         </div>
       </section>
 
-      {/* Customer reviews */}
+      {/* Reviews */}
 
       <section className="mt-16 border-t border-gray-200 pt-10">
         <div className="flex flex-wrap items-center justify-between gap-4">
@@ -909,10 +878,9 @@ export default function ProductDetails() {
             <h2 className="text-2xl font-bold text-gray-900">
               Customer reviews
             </h2>
-
             <p className="mt-2 text-sm text-gray-500">
-              {reviews.length} review
-              {reviews.length === 1 ? "" : "s"} for this product
+              {reviews.length} review{reviews.length === 1 ? "" : "s"} for this
+              product
             </p>
           </div>
 
@@ -921,7 +889,6 @@ export default function ProductDetails() {
               <p className="text-2xl font-bold text-gray-900">
                 {averageRating.toFixed(1)} / 5
               </p>
-
               <RatingStars rating={averageRating} />
             </div>
           )}
@@ -930,9 +897,7 @@ export default function ProductDetails() {
         {reviews.length === 0 ? (
           <div className="mt-6 rounded-xl border border-dashed border-gray-300 px-5 py-10 text-center">
             <Star size={32} className="mx-auto text-gray-300" />
-
             <h3 className="mt-3 font-medium text-gray-800">No reviews yet</h3>
-
             <p className="mt-1 text-sm text-gray-500">
               Be the first to review this product.
             </p>
@@ -946,7 +911,7 @@ export default function ProductDetails() {
         )}
       </section>
 
-      {/* Add Review Form Card */}
+      {/* Review form */}
 
       <section className="mt-8">
         <ReviewForm productId={productId} onReviewSubmitted={handleRetry} />
@@ -970,11 +935,8 @@ export default function ProductDetails() {
           </div>
 
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            {relatedProducts.map((relatedProduct, index) => (
-              <RelatedProductCard
-                key={getId(relatedProduct) || index}
-                product={relatedProduct}
-              />
+            {relatedProducts.map((item, index) => (
+              <RelatedProductCard key={getId(item) || index} product={item} />
             ))}
           </div>
         </section>
